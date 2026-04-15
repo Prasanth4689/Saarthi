@@ -1,0 +1,44 @@
+# ===========================
+# Node / NPM
+# ===========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp
+.pnp.js
+
+# ===========================
+# Environment Variables
+# NEVER commit real secrets!
+# ===========================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ===========================
+# Build outputs
+# ===========================
+dist/
+build/
+.vite/
+
+# ===========================
+# OS / Editor
+# ===========================
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.idea/
+.vscode/
+
+# ===========================
+# Zip archives (large files)
+# ===========================
+*.zip

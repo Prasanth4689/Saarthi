@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@theme {
+  /* Neubrutalism Color Palette */
+  --color-primary: #ff6b6b;
+  --color-secondary: #4ecdc4;
+  --color-accent: #ffe66d;
+  --color-background: #f7f7f7;
+  --color-foreground: #1a1a1a;
+  --color-border: #1a1a1a;
+  --color-muted: #a8a8a8;
+  --color-muted-foreground: #6b6b6b;
+  --color-card: #ffffff;
+  --color-card-foreground: #1a1a1a;
+  
+  /* Vibrant accent colors for neubrutalism */
+  --color-blue-vibrant: #5b8def;
+  --color-purple-vibrant: #a78bfa;
+  --color-pink-vibrant: #f472b6;
+  --color-green-vibrant: #4ade80;
+  --color-orange-vibrant: #fb923c;
+  --color-yellow-vibrant: #fbbf24;
+  
+  /* Shadows for neubrutalism */
+  --shadow-brutal: 6px 6px 0px #1a1a1a;
+  --shadow-brutal-lg: 8px 8px 0px #1a1a1a;
+  --shadow-brutal-sm: 4px 4px 0px #1a1a1a;
+  
+  /* Border widths */
+  --border-width: 3px;
+  --border-width-thick: 4px;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1 {
+  @apply scroll-m-20 text-4xl font-black tracking-tight lg:text-5xl;
+}
+
+h2 {
+  @apply scroll-m-20 text-3xl font-black tracking-tight;
+}
+
+h3 {
+  @apply scroll-m-20 text-2xl font-black tracking-tight;
+}
+
+h4 {
+  @apply scroll-m-20 text-xl font-black tracking-tight;
+}
+
+p {
+  @apply leading-7;
+}
+
+/* Neubrutalism overrides */
+.brutal-shadow {
+  box-shadow: 6px 6px 0px #1a1a1a;
+}
+
+.brutal-shadow-lg {
+  box-shadow: 8px 8px 0px #1a1a1a;
+}
+
+.brutal-shadow-sm {
+  box-shadow: 4px 4px 0px #1a1a1a;
+}
+
+.brutal-border {
+  border: 3px solid #1a1a1a;
+}
+
+.brutal-border-thick {
+  border: 4px solid #1a1a1a;
+}
+
+/* Animate on hover */
+.brutal-hover {
+  transition: all 0.2s ease;
+}
+
+.brutal-hover:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0px #1a1a1a;
+}
+
+.brutal-hover:active {
+  transform: translate(2px, 2px);
+  box-shadow: 3px 3px 0px #1a1a1a;
+}
+
+/* Pattern background */
+.pattern-dots {
+  background-image: radial-gradient(circle, #1a1a1a 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.pattern-grid {
+  background-image: 
+    linear-gradient(to right, #1a1a1a 1px, transparent 1px),
+    linear-gradient(to bottom, #1a1a1a 1px, transparent 1px);
+  background-size: 30px 30px;
+}
