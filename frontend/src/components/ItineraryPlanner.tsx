@@ -2,19 +2,14 @@ import { useState } from "react";
 import axios from "axios";
 import API_BASE_URL from "../config";
 import {
-  Calendar,
-  MapPin,
-  Utensils,
-  Camera,
-  Coffee,
-  Train,
+  Calendar, MapPin, Utensils, Camera, Coffee, Train, Download,
 } from "lucide-react";
+import jsPDF from "jspdf";
 
 interface ItineraryPlannerProps {
   destination: string;
   days: number;
 }
-
 interface Activity {
   time: string;
   title: string;
@@ -22,78 +17,62 @@ interface Activity {
   icon: string;
   duration: string;
 }
-
 interface DayPlan {
   day: number;
   title: string;
   activities: Activity[];
 }
 
+const ICON_EMOJI: Record<string, string> = {
+  food: "Food", camera: "Sightseeing", coffee: "Leisure", transport: "Travel",
+};
+const ICON_COLOR_HEX: Record<string, [number,number,number]> = {
+  food:      [255, 107, 107],
+  camera:    [244, 114, 182],
+  coffee:    [251, 146,  60],
+  transport: [ 91, 141, 239],
+};
+
 export function ItineraryPlanner({ destination, days }: ItineraryPlannerProps) {
   const [itinerary, setItinerary] = useState<DayPlan[]>([]);
   const [activeDay, setActiveDay] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading]     = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError]         = useState<string | null>(null);
 
-  /* --- ICON HELPERS --- */
+  /* ─── Icon helpers (screen UI) ─── */
   const getActivityIcon = (iconType: string) => {
     const props = { className: "w-5 h-5 text-white" };
     switch (iconType) {
-      case "food":
-        return <Utensils {...props} />;
-      case "camera":
-        return <Camera {...props} />;
-      case "coffee":
-        return <Coffee {...props} />;
-      case "transport":
-        return <Train {...props} />;
-      default:
-        return <MapPin {...props} />;
+      case "food":      return <Utensils   {...props} />;
+      case "camera":    return <Camera     {...props} />;
+      case "coffee":    return <Coffee     {...props} />;
+      case "transport": return <Train      {...props} />;
+      default:          return <MapPin     {...props} />;
     }
   };
-
   const getActivityColor = (iconType: string) => {
-    switch (iconType) {
-      case "food":
-        return "#ff6b6b";
-      case "camera":
-        return "#f472b6";
-      case "coffee":
-        return "#fb923c";
-      case "transport":
-        return "#5b8def";
-      default:
-        return "#4ecdc4";
-    }
+    const m: Record<string,string> = {
+      food: "#ff6b6b", camera: "#f472b6", coffee: "#fb923c", transport: "#5b8def",
+    };
+    return m[iconType] || "#4ecdc4";
   };
 
-  /* --- API CALL --- */
+  /* ─── API Call ─── */
   const generateItinerary = async () => {
     if (!destination || days <= 0) {
       alert("Please enter a valid destination and number of days.");
       return;
     }
-
     setLoading(true);
     setError(null);
     try {
-      // ✅ Matches backend route /api/itinerary
-      // const res = await axios.post(`${API_BASE_URL}/api/itinerary`...
-        const res = await axios.post(`${API_BASE_URL}/api/itinerary`, {
-
-        destination,
-        days,
-      });
-
-      console.log("Itinerary data:", res.data);
-
+      const res = await axios.post(`${API_BASE_URL}/api/itinerary`, { destination, days });
       if (res.data?.days?.length > 0) {
         setItinerary(res.data.days);
         setActiveDay(1);
       } else {
-        setError(
-          "Could not generate itinerary. Try again with a different destination."
-        );
+        setError("Could not generate itinerary. Try again.");
       }
     } catch (err: any) {
       console.error("❌ Error fetching itinerary:", err.message);
@@ -103,134 +82,237 @@ export function ItineraryPlanner({ destination, days }: ItineraryPlannerProps) {
     }
   };
 
-  /* --- UI --- */
+  /* ─────────────────────────────────────────────────────
+     PDF GENERATION — all days in ONE file using jsPDF
+  ───────────────────────────────────────────────────── */
+  const handleDownloadPDF = () => {
+    if (itinerary.length === 0) return;
+    setDownloading(true);
+
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW  = doc.internal.pageSize.getWidth();
+      const pageH  = doc.internal.pageSize.getHeight();
+      const margin = 14;
+      const cW     = pageW - margin * 2;   // usable width
+      const iconW  = 7;                    // left coloured stripe
+      const textX  = margin + iconW + 4;  // where text starts
+      const textW  = cW - iconW - 5;      // max text width
+      let y = margin;
+
+      /* ── Helpers ── */
+      const newPageIfNeeded = (need: number) => {
+        if (y + need > pageH - margin) { doc.addPage(); y = margin; }
+      };
+      const rgb = (r: number, g: number, b: number) => doc.setTextColor(r, g, b);
+      const fill = (r: number, g: number, b: number) => doc.setFillColor(r, g, b);
+      const draw = (r: number, g: number, b: number) => doc.setDrawColor(r, g, b);
+
+      /* ── HEADER ── */
+      fill(255, 230, 109); draw(26, 26, 26); doc.setLineWidth(0.8);
+      doc.rect(margin, y, cW, 26, "FD");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(16); rgb(26, 26, 26);
+      doc.text(`Saarthi – ${days}-Day Trip to ${destination}`, pageW / 2, y + 10, { align: "center" });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); rgb(80, 80, 80);
+      doc.text("Generated by Saarthi AI Trip Planner", pageW / 2, y + 19, { align: "center" });
+      y += 32;
+
+      /* ── DAYS ── */
+      itinerary.forEach((day) => {
+        const acts = Array.isArray(day.activities) ? day.activities : [];
+        newPageIfNeeded(16);
+
+        /* Day header */
+        fill(74, 222, 128); draw(26, 26, 26); doc.setLineWidth(0.6);
+        doc.rect(margin, y, cW, 11, "FD");
+        doc.setFont("helvetica", "bold"); doc.setFontSize(11); rgb(255, 255, 255);
+        doc.text(`  Day ${day.day}: ${day.title || ""}`, margin + 2, y + 7.5);
+        y += 14;
+
+        /* Activities */
+        acts.forEach((act) => {
+          // Pre-calculate description lines to know row height BEFORE drawing anything
+          doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+          const descLines = doc.splitTextToSize(act.description || "", textW);
+
+          // Row breakdown:
+          //   y + 1.5  → time + duration badges  (height 6)
+          //   y + 9.5  → title                   (~5mm)
+          //   y + 16   → description lines        (each 4.5mm)
+          const descH  = descLines.length * 4.5;
+          const rowH   = 16 + descH + 6;          // 6mm bottom padding
+
+          newPageIfNeeded(rowH + 2);
+
+          const [r, g, b] = ICON_COLOR_HEX[act.icon] || [78, 205, 196];
+
+          /* Left colour stripe (full row height) */
+          fill(r, g, b); draw(26, 26, 26); doc.setLineWidth(0.3);
+          doc.rect(margin, y, iconW, rowH, "FD");
+
+          /* Row outline */
+          fill(255, 255, 255); draw(220, 220, 220); doc.setLineWidth(0.2);
+          doc.rect(margin + iconW, y, cW - iconW, rowH, "FD");
+
+          /* Time badge */
+          fill(255, 230, 109); draw(26, 26, 26); doc.setLineWidth(0.3);
+          doc.rect(textX, y + 1.5, 30, 6, "FD");
+          doc.setFont("helvetica", "bold"); doc.setFontSize(8); rgb(26, 26, 26);
+          doc.text(act.time || "", textX + 2, y + 6);
+
+          /* Duration badge */
+          fill(224, 253, 244); draw(78, 205, 196); doc.setLineWidth(0.3);
+          doc.rect(textX + 32, y + 1.5, 26, 6, "FD");
+          doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); rgb(4, 120, 87);
+          doc.text(act.duration || "", textX + 34, y + 6);
+
+          /* Title */
+          doc.setFont("helvetica", "bold"); doc.setFontSize(10); rgb(26, 26, 26);
+          doc.text(act.title || "", textX, y + 11.5);
+
+          /* Description (word-wrapped) */
+          doc.setFont("helvetica", "normal"); doc.setFontSize(8); rgb(90, 90, 90);
+          doc.text(descLines, textX, y + 17);
+
+          y += rowH + 3;
+        });
+
+        y += 4; // gap between days
+      });
+
+      /* ── FOOTER ── */
+      newPageIfNeeded(12);
+      fill(249, 249, 249); draw(26, 26, 26); doc.setLineWidth(0.5);
+      doc.rect(margin, y, cW, 11, "FD");
+      doc.setFont("helvetica", "italic"); doc.setFontSize(8); rgb(100, 100, 100);
+      doc.text(
+        `Planned with love by Saarthi AI Trip Planner  ·  Have a wonderful trip to ${destination}!`,
+        pageW / 2, y + 7, { align: "center" }
+      );
+
+      /* ── SAVE ── */
+      doc.save(`Saarthi-${destination}-${days}Day-Itinerary.pdf`);
+
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      alert("PDF generation failed. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+
+  /* ─── UI ─── */
   return (
     <div className="bg-white brutal-border brutal-shadow-lg p-6 rotate-[-0.3deg]">
       <div className="rotate-[0.3deg]">
+
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-[#4ade80] p-3 brutal-border rotate-2">
-            <Calendar className="w-6 h-6 text-white" />
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="bg-[#4ade80] p-3 brutal-border rotate-2">
+              <Calendar className="w-6 h-6 text-white" />
+            </div>
+            <h2 className="text-black text-xl font-semibold">
+              {days}-Day Itinerary for {destination}
+            </h2>
           </div>
-          <h2 className="text-black text-xl font-semibold">
-            {days}-Day Itinerary for {destination}
-          </h2>
+
+          {itinerary.length > 0 && (
+            <button
+              onClick={handleDownloadPDF}
+              disabled={downloading}
+              className="flex items-center gap-2 px-5 py-2 brutal-border bg-[#4ade80] hover:bg-[#22c55e] text-white font-bold transition-all hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_#1a1a1a] disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              {downloading
+                ? "Generating PDF..."
+                : `Download PDF – All ${itinerary.length} Days`}
+            </button>
+          )}
         </div>
 
         {/* Generate Button */}
         <button
           onClick={generateItinerary}
           disabled={loading}
-          className={`mb-6 px-4 py-2 brutal-border brutal-shadow text-white font-medium transition-all
-            ${
-              loading
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-[#ff6b6b] hover:bg-[#ff5252]"
-            }`}
+          className={`mb-6 px-5 py-2 brutal-border brutal-shadow text-white font-bold transition-all
+            ${loading
+              ? "bg-gray-400 cursor-not-allowed"
+              : "bg-[#ff6b6b] hover:bg-[#ff5252] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_#1a1a1a]"}`}
         >
-          {loading ? "Generating..." : "Generate Itinerary"}
+          {loading ? "⏳ Generating..." : "✨ Generate Itinerary"}
         </button>
 
-        {/* Loading */}
-        {loading && (
-          <p className="text-gray-500 animate-pulse">
-            Creating your personalized travel plan...
-          </p>
-        )}
+        {loading && <p className="text-gray-500 animate-pulse">Creating your personalised travel plan...</p>}
 
-        {/* Error */}
         {error && (
           <div className="p-4 mb-4 bg-red-100 text-red-700 brutal-border">
             <p>{error}</p>
           </div>
         )}
 
-        {/* No Data */}
         {!loading && !error && itinerary.length === 0 && (
-          <p className="text-gray-600">
-            Click "Generate Itinerary" to plan your trip.
-          </p>
+          <p className="text-gray-500">Click "Generate Itinerary" to plan your trip day-by-day.</p>
         )}
 
-        {/* Display Itinerary */}
+        {/* Tabbed view */}
         {!loading && !error && itinerary.length > 0 && (
           <>
-            {/* Day Tabs */}
             <div className="grid grid-cols-3 gap-4 mb-6">
               {itinerary.map((day) => (
                 <button
                   key={day.day}
                   onClick={() => setActiveDay(day.day)}
-                  className={`p-4 brutal-border transition-all ${
+                  className={`p-4 brutal-border transition-all text-left ${
                     activeDay === day.day
                       ? "bg-black text-white translate-x-[-2px] translate-y-[-2px] shadow-[6px_6px_0px_#1a1a1a]"
                       : "bg-white hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_#1a1a1a]"
                   }`}
                 >
-                  <div className="text-2xl mb-1 font-semibold">
-                    Day {day.day}
-                  </div>
-                  <div className="text-sm opacity-80">{day.title}</div>
+                  <div className="text-xl font-black">Day {day.day}</div>
+                  <div className="text-xs opacity-75 mt-1 truncate">{day.title}</div>
                 </button>
               ))}
             </div>
 
-            {/* Active Day Details */}
-            {itinerary.map(
-              (day) =>
-                activeDay === day.day && (
-                  <div key={day.day} className="space-y-4">
-                    <div className="bg-gradient-to-r from-[#4ade80] to-[#4ecdc4] brutal-border p-4 rotate-[-0.5deg]">
-                      <h3 className="text-white font-semibold">
-                        Day {day.day}: {day.title}
-                      </h3>
-                    </div>
-
-                    {/* Activities */}
-                    {day.activities.map((activity, index) => (
+            {itinerary.filter(d => d.day === activeDay).map(day => (
+              <div key={day.day} className="space-y-4">
+                <div className="bg-gradient-to-r from-[#4ade80] to-[#4ecdc4] brutal-border p-4">
+                  <h3 className="text-white font-bold text-lg">
+                    Day {day.day}: {day.title}
+                  </h3>
+                </div>
+                {(Array.isArray(day.activities) ? day.activities : []).map((activity, index) => (
+                  <div
+                    key={index}
+                    className="brutal-border bg-white p-4 brutal-hover transition-transform"
+                    style={{ transform: `rotate(${[0.5,-0.3,0.4,-0.5,0.3,-0.4][index % 6]}deg)` }}
+                  >
+                    <div className="flex items-start gap-4">
                       <div
-                        key={index}
-                        className="brutal-border bg-white p-4 brutal-hover transition-transform"
-                        style={{
-                          transform: `rotate(${
-                            [0.5, -0.3, 0.4, -0.5, 0.3, -0.4][index] || 0
-                          }deg)`,
-                        }}
+                        className="p-3 brutal-border shrink-0"
+                        style={{ backgroundColor: getActivityColor(activity.icon) }}
                       >
-                        <div className="flex items-start gap-4">
-                          <div
-                            className="p-3 brutal-border shrink-0 rotate-3"
-                            style={{
-                              backgroundColor: getActivityColor(activity.icon),
-                            }}
-                          >
-                            {getActivityIcon(activity.icon)}
+                        {getActivityIcon(activity.icon)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <div className="bg-[#ffe66d] brutal-border px-3 py-1">
+                            <span className="text-sm font-bold">{activity.time}</span>
                           </div>
-
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <div className="bg-[#ffe66d] brutal-border px-3 py-1 rotate-[-2deg]">
-                                <span className="text-sm font-medium">
-                                  {activity.time}
-                                </span>
-                              </div>
-                              <div className="bg-[#4ecdc4]/20 brutal-border px-2 py-1 text-xs font-medium">
-                                {activity.duration}
-                              </div>
-                            </div>
-                            <h4 className="mt-2 font-semibold">
-                              {activity.title}
-                            </h4>
-                            <p className="text-sm text-gray-700">
-                              {activity.description}
-                            </p>
+                          <div className="bg-[#4ecdc4]/20 brutal-border px-2 py-1 text-xs font-medium">
+                            {activity.duration}
                           </div>
                         </div>
+                        <h4 className="font-bold mb-1">{activity.title}</h4>
+                        <p className="text-sm text-gray-600">{activity.description}</p>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                )
-            )}
+                ))}
+              </div>
+            ))}
           </>
         )}
       </div>
